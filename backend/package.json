@@ -21,7 +21,8 @@
     "test:debug": "vitest --inspect-brk --no-file-parallelism",
     "test:e2e": "vitest run --config ./vitest.config.e2e.ts",
     "test:integration": "vitest run --config ./vitest.config.integration.ts",
-    "test:visual": "vitest run --config ./vitest.config.visual.ts"
+    "test:visual": "vitest run --config ./vitest.config.visual.ts",
+    "test:angular-generator": "vitest run --config ./vitest.config.angular-generator.ts"
   },
   "dependencies": {
     "@fastify/cors": "^11.3.0",

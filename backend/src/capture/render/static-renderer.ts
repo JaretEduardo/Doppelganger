@@ -15,8 +15,13 @@ import { renderDeclarationBlock } from './css-utils.js';
 
 const STYLESHEET_HREF = 'styles.css';
 
-/** Turns a Doppelganger node id ("n0") into its DOM/CSS selector id ("dg-n0"). */
-function toDomId(nodeId: string): string {
+/**
+ * Turns a Doppelganger node id ("n0") into its DOM/CSS selector id ("dg-n0").
+ * Exported so other consumers (e.g. the Angular generator, which applies the
+ * root's id to its `<app-root>` host) use the exact same id format instead of
+ * re-deriving it.
+ */
+export function toDomId(nodeId: string): string {
   return `dg-${nodeId}`;
 }
 
@@ -43,9 +48,39 @@ export function renderCapturedPage(page: CapturedPage): RenderedPage {
     '',
   ].join('\n');
 
-  const css = cssRules.length > 0 ? `${cssRules.join('\n\n')}\n` : '';
+  const css = serializeCssRules(cssRules);
 
   return { html, css };
+}
+
+/**
+ * Renders the full stylesheet for a page — one `#dg-<id>` rule per node,
+ * including the root element itself. Shared by {@link renderCapturedPage}
+ * and by other consumers (e.g. the Angular generator) that need the exact
+ * same CSS without re-deriving it from `CapturedStyles` a second time.
+ */
+export function renderStyles(page: CapturedPage): string {
+  const cssRules: string[] = [];
+  if (page.root) renderElement(page.root, cssRules);
+  return serializeCssRules(cssRules);
+}
+
+/**
+ * Renders the root element's *children* as HTML — not the root's own tag.
+ * Meant for embedding inside another host element that stands in for the
+ * root, e.g. an Angular component's `<app-root>` (which carries the root's
+ * id/styles via a host binding instead of a nested `<body>` tag). Reuses the
+ * exact same node-rendering path as {@link renderCapturedPage}, so structure,
+ * attributes, text and escaping are never re-implemented per consumer.
+ */
+export function renderDocumentBody(page: CapturedPage): string {
+  if (!page.root) return '';
+  const cssRules: string[] = [];
+  return page.root.children.map((child) => renderNode(child, cssRules)).join('');
+}
+
+function serializeCssRules(cssRules: string[]): string {
+  return cssRules.length > 0 ? `${cssRules.join('\n\n')}\n` : '';
 }
 
 function renderNode(node: CapturedNode, cssRules: string[]): string {
