@@ -5,6 +5,8 @@ import {
 } from '@nestjs/common';
 import { chromium } from 'playwright';
 import { CaptureResult } from './interfaces/capture-result.interface.js';
+import { extractCapturedPage } from './ir/dom-extractor.browser.js';
+import { IGNORED_TAGS } from './ir/ignored-tags.js';
 
 const VIEWPORT = { width: 1440, height: 900 };
 const NAVIGATION_TIMEOUT_MS = 30_000;
@@ -26,17 +28,23 @@ export class CaptureService {
       });
 
       const title = await page.title();
-      const elements = await page.evaluate(
-        () => document.querySelectorAll('*').length,
-      );
+      const extraction = await page.evaluate(extractCapturedPage, IGNORED_TAGS);
       const screenshotBuffer = await page.screenshot({ fullPage: true });
 
       return {
         url,
         title,
         viewport: VIEWPORT,
-        elements,
+        elements: extraction.totalElementCount,
         screenshot: `data:image/png;base64,${screenshotBuffer.toString('base64')}`,
+        ir: {
+          url,
+          title,
+          viewport: VIEWPORT,
+          root: extraction.root,
+          assets: extraction.assets,
+          nodeCount: extraction.nodeCount,
+        },
       };
     } catch (error) {
       this.logger.error(`Failed to capture ${url}`, error);

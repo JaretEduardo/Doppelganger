@@ -1,3 +1,5 @@
+import type { CapturedPage } from './captured-page';
+
 export interface CaptureViewport {
   width: number;
   height: number;
@@ -9,4 +11,5 @@ export interface CaptureResult {
   viewport: CaptureViewport;
   elements: number;
   screenshot: string;
+  ir: CapturedPage;
 }
