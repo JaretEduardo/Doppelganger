@@ -43,6 +43,36 @@ const SAFE_ATTRIBUTE_ALLOWLIST = new Set([
   'width',
   'height',
   'role',
+  // SVG geometry/presentation attributes. Without these, inline <svg> shapes
+  // (rect/circle/path/line/polygon/use...) lose their fill, stroke and
+  // geometry and render as invisible empty elements — found via the complex
+  // visual fixture's inline "verified" checkmark icon (Milestone 2.5).
+  // Lowercased here to match isSafeAttribute's case-insensitive lookup; the
+  // rendered output still uses whatever original case was captured (e.g.
+  // "viewBox"), since only the safety check, not the emitted name, is
+  // lowercased.
+  'viewbox',
+  'xmlns',
+  'x',
+  'y',
+  'x1',
+  'y1',
+  'x2',
+  'y2',
+  'cx',
+  'cy',
+  'r',
+  'rx',
+  'ry',
+  'd',
+  'points',
+  'fill',
+  'stroke',
+  'stroke-width',
+  'stroke-linecap',
+  'stroke-linejoin',
+  'stroke-dasharray',
+  'preserveaspectratio',
 ]);
 
 export function escapeHtml(value: string): string {

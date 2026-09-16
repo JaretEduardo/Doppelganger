@@ -19,6 +19,11 @@ function styles(overrides: Partial<CapturedStyles> = {}): CapturedStyles {
   const base: CapturedStyles = {
     display: 'block',
     position: 'static',
+    boxSizing: 'content-box',
+    top: 'auto',
+    right: 'auto',
+    bottom: 'auto',
+    left: 'auto',
     width: 'auto',
     height: 'auto',
     minWidth: 'auto',
@@ -38,11 +43,15 @@ function styles(overrides: Partial<CapturedStyles> = {}): CapturedStyles {
     letterSpacing: 'normal',
     textAlign: 'start',
     textDecoration: 'none solid rgb(0, 0, 0)',
-    border: '0px none rgb(0, 0, 0)',
+    borderTop: '0px none rgb(0, 0, 0)',
+    borderRight: '0px none rgb(0, 0, 0)',
+    borderBottom: '0px none rgb(0, 0, 0)',
+    borderLeft: '0px none rgb(0, 0, 0)',
     borderRadius: '0px',
     boxShadow: 'none',
     opacity: '1',
     overflow: 'visible',
+    listStyle: 'disc outside none',
     flexDirection: 'row',
     flexWrap: 'nowrap',
     alignItems: 'normal',
@@ -223,5 +232,85 @@ describe('renderCapturedPage', () => {
     const childRuleIndex = rendered.css.indexOf(`#dg-${child.id} {`);
     expect(rootRuleIndex).toBeGreaterThanOrEqual(0);
     expect(childRuleIndex).toBeGreaterThan(rootRuleIndex);
+  });
+
+  it('preserves SVG geometry and presentation attributes (fill, viewBox, d, cx, cy, r...)', () => {
+    // Regression test: these are plain DOM attributes on SVG shape elements,
+    // not CSS, so they need their own allowlist entries or the shape renders
+    // as an empty, invisible element. Found via the complex visual fixture's
+    // inline "verified" checkmark icon (Milestone 2.5).
+    const circle = element('circle', {
+      attributes: { cx: '10', cy: '10', r: '10', fill: 'rgb(34,197,94)' },
+    });
+    const path = element('path', {
+      attributes: {
+        d: 'M6 10l3 3l5-6',
+        stroke: 'white',
+        'stroke-width': '2',
+        fill: 'none',
+      },
+    });
+    const svg = element('svg', {
+      attributes: { viewBox: '0 0 20 20', width: '16', height: '16' },
+      children: [circle, path],
+    });
+    const rendered = renderCapturedPage(page(element('body', { children: [svg] })));
+
+    expect(rendered.html).toContain('viewBox="0 0 20 20"');
+    expect(rendered.html).toContain('cx="10" cy="10" r="10" fill="rgb(34,197,94)"');
+    expect(rendered.html).toContain('d="M6 10l3 3l5-6"');
+    expect(rendered.html).toContain('stroke="white"');
+    expect(rendered.html).toContain('stroke-width="2"');
+  });
+
+  it('emits box-sizing so a captured border-box width is not misread as content-box', () => {
+    // Regression test: without box-sizing in the output, a border-box element
+    // whose captured `width` already includes its padding/border renders
+    // wider than the original (the renderer's elements default to
+    // content-box). Found via the Milestone 2.5 complex fixture diff.
+    const root = element('body', {
+      styleOverrides: { boxSizing: 'border-box', width: '100px', padding: '10px' },
+    });
+    const rendered = renderCapturedPage(page(root));
+
+    expect(rendered.css).toContain('box-sizing: border-box;');
+  });
+
+  it('emits border per-side so a border-bottom-only divider is not silently dropped', () => {
+    // Regression test: getComputedStyle().border (shorthand) is empty unless
+    // all four sides match, which previously meant "border: ;" (invalid,
+    // ignored) for the very common border-bottom-only pattern. Found via the
+    // Milestone 2.5 complex fixture's table row dividers disappearing.
+    const row = element('td', { styleOverrides: { borderBottom: '1px solid rgb(226, 232, 240)' } });
+    const rendered = renderCapturedPage(page(element('body', { children: [row] })));
+
+    expect(rendered.css).toContain('border-bottom: 1px solid rgb(226, 232, 240);');
+    expect(rendered.css).not.toContain('border: ;');
+  });
+
+  it('emits list-style so a reset list does not regain default bullets', () => {
+    // Regression test: `list-style: none` (near-universal on nav/feature
+    // lists) wasn't reproduced, so reconstructed <li>s fell back to the
+    // browser's default disc bullets. Found via the Milestone 2.5 complex
+    // fixture's sidebar nav and card feature lists.
+    const list = element('ul', { styleOverrides: { listStyle: 'none' } });
+    const rendered = renderCapturedPage(page(element('body', { children: [list] })));
+
+    expect(rendered.css).toContain('list-style: none;');
+  });
+
+  it('emits top/right/bottom/left so absolutely positioned elements land in place', () => {
+    // Regression test: `position: absolute` without its offsets renders at
+    // the element's static position instead of the intended corner. Found
+    // via the Milestone 2.5 complex fixture (status dot + card ribbon both
+    // moved).
+    const badge = element('span', {
+      styleOverrides: { position: 'absolute', top: '2px', right: '-6px' },
+    });
+    const rendered = renderCapturedPage(page(element('body', { children: [badge] })));
+
+    expect(rendered.css).toContain('position: absolute;');
+    expect(rendered.css).toContain('top: 2px;');
+    expect(rendered.css).toContain('right: -6px;');
   });
 });

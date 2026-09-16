@@ -31,6 +31,12 @@ const SAMPLE_HTML = `<!doctype html>
         <img src="/banner.jpg" alt="Banner" />
       </picture>
       <div class="hero" style="background-image: url('/hero.jpg'); width: 200px;"></div>
+      <div class="border-box-demo" style="box-sizing: border-box; width: 100px; padding: 10px; border: 2px solid black;"></div>
+      <div class="positioned-parent" style="position: relative; width: 40px; height: 40px;">
+        <span class="positioned-badge" style="position: absolute; top: 2px; right: -6px; bottom: auto; left: auto;"></span>
+      </div>
+      <div class="border-bottom-only" style="border-bottom: 3px solid rgb(1, 2, 3);"></div>
+      <ul class="no-bullets" style="list-style: none;"><li>Item</li></ul>
       <svg><use href="/sprite.svg#icon-check"></use></svg>
       <noscript>No JS</noscript>
       <template><span>Ignored template content</span></template>
@@ -177,11 +183,19 @@ describe('extractCapturedPage', () => {
         'alignItems',
         'background',
         'backgroundColor',
-        'border',
+        'borderTop',
+        'borderRight',
+        'borderBottom',
+        'borderLeft',
         'borderRadius',
         'boxShadow',
+        'boxSizing',
         'color',
         'display',
+        'bottom',
+        'left',
+        'right',
+        'top',
         'flexDirection',
         'flexWrap',
         'fontFamily',
@@ -202,6 +216,7 @@ describe('extractCapturedPage', () => {
         'minWidth',
         'opacity',
         'overflow',
+        'listStyle',
         'padding',
         'position',
         'textAlign',
@@ -211,6 +226,69 @@ describe('extractCapturedPage', () => {
         'zIndex',
       ].sort(),
     );
+  });
+
+  it('captures boxSizing, since width/padding alone are ambiguous without it', () => {
+    // A border-box element's computed `width` already includes its padding and
+    // border (100px stays 100px total) — reproducing that width under the
+    // renderer's default content-box would make the element render ~24px
+    // wider (100 + 2*10 padding + 2*2 border). Regression test for the fixed
+    // pixel-diff discovered via the complex visual fixture (Milestone 2.5).
+    const borderBoxDemo = findElement(
+      result.root!,
+      (node) => node.attributes['class'] === 'border-box-demo',
+    );
+
+    expect(borderBoxDemo.styles.boxSizing).toBe('border-box');
+    expect(borderBoxDemo.styles.width).toBe('100px');
+  });
+
+  it('captures top/right/bottom/left offsets for absolutely positioned elements', () => {
+    // Regression test: `position: absolute` alone is not enough to place an
+    // element — without its offsets it renders at its static position
+    // instead of the intended corner. Found via the complex visual fixture's
+    // avatar status dot and card "New" ribbon both landing in the wrong spot
+    // (Milestone 2.5).
+    const badge = findElement(
+      result.root!,
+      (node) => node.attributes['class'] === 'positioned-badge',
+    );
+
+    expect(badge.styles.position).toBe('absolute');
+    expect(badge.styles.top).toBe('2px');
+    expect(badge.styles.right).toBe('-6px');
+    // bottom/left were left as `auto` in the source, but the browser resolves
+    // them to a used pixel value here since the containing block's size is
+    // definite (CSSOM resolved-value rules) — asserting they're captured as
+    // *some* concrete value, not necessarily the literal string "auto".
+    expect(badge.styles.bottom).toMatch(/^-?\d+(\.\d+)?px$/);
+    expect(badge.styles.left).toMatch(/^-?\d+(\.\d+)?px$/);
+  });
+
+  it('captures border per-side, since the shorthand is empty for non-uniform borders', () => {
+    // Regression test: getComputedStyle().border (the shorthand) resolves to
+    // an empty string unless all four sides share the same width/style/color
+    // — an extremely common case being a border-bottom-only divider (table
+    // rows). Capturing per-side avoids silently dropping it. Found via the
+    // complex visual fixture's "Recent activity" table (Milestone 2.5).
+    const el = findElement(
+      result.root!,
+      (node) => node.attributes['class'] === 'border-bottom-only',
+    );
+
+    expect(el.styles.borderBottom).toBe('3px solid rgb(1, 2, 3)');
+    expect(el.styles.borderTop).not.toBe('');
+    expect(el.styles.borderLeft).not.toBe('');
+    expect(el.styles.borderRight).not.toBe('');
+  });
+
+  it('captures listStyle, since a reset list otherwise reappears with default bullets', () => {
+    // Regression test: `list-style: none` (near-universal on nav/feature
+    // lists) wasn't captured, so reconstructed <li>s fell back to the
+    // browser's default disc bullets. Found via the complex visual fixture's
+    // sidebar nav and card feature lists (Milestone 2.5).
+    const list = findElement(result.root!, (node) => node.attributes['class'] === 'no-bullets');
+    expect(list.styles.listStyle).toContain('none');
   });
 
   it('assigns unique, stable ids and reports a matching nodeCount', () => {

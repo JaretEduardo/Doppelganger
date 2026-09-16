@@ -14,6 +14,11 @@ export interface CapturedRect {
 export interface CapturedStyles {
   display: string;
   position: string;
+  boxSizing: string;
+  top: string;
+  right: string;
+  bottom: string;
+  left: string;
   width: string;
   height: string;
   minWidth: string;
@@ -33,11 +38,21 @@ export interface CapturedStyles {
   letterSpacing: string;
   textAlign: string;
   textDecoration: string;
-  border: string;
+  /**
+   * Per-side, not the `border` shorthand: the shorthand's resolved value is
+   * only defined when all four sides are identical (CSSOM), so it comes back
+   * as an empty string for the extremely common border-bottom-only pattern
+   * (table rows, dividers) — silently dropping the border on reconstruction.
+   */
+  borderTop: string;
+  borderRight: string;
+  borderBottom: string;
+  borderLeft: string;
   borderRadius: string;
   boxShadow: string;
   opacity: string;
   overflow: string;
+  listStyle: string;
   flexDirection: string;
   flexWrap: string;
   alignItems: string;
