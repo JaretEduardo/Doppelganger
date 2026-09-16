@@ -11,8 +11,11 @@
         placeholder="https://example.com"
         [formField]="urlForm.url"
       />
-      <button type="submit" [disabled]="loading()">
+      <button type="submit" [disabled]="busy()">
         {{ loading() ? 'Analyzing…' : 'Analyze' }}
+      </button>
+      <button type="button" [disabled]="busy()" (click)="onGenerate()">
+        {{ generating() ? 'Generating…' : 'Generate Angular Project' }}
       </button>
     </div>
 
@@ -31,6 +34,14 @@
 
   @if (error(); as errorMessage) {
     <p class="status error" role="alert">{{ errorMessage }}</p>
+  }
+
+  @if (generating()) {
+    <p class="status" role="status">Generating Angular project…</p>
+  }
+
+  @if (generateError(); as generateErrorMessage) {
+    <p class="status error" role="alert">{{ generateErrorMessage }}</p>
   }
 
   @if (result(); as capture) {

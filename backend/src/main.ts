@@ -14,6 +14,10 @@ async function bootstrap() {
 
   app.enableCors({
     origin: process.env.FRONTEND_ORIGIN ?? 'http://localhost:4200',
+    // The frontend reads the ZIP's suggested filename off this header for
+    // the /generate download; browsers hide response headers from JS by
+    // default unless the server explicitly exposes them.
+    exposedHeaders: ['Content-Disposition'],
   });
 
   app.useGlobalPipes(
