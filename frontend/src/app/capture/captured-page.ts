@@ -58,21 +58,29 @@ export interface CapturedAsset {
   srcset?: string;
 }
 
-export interface CapturedNode {
+export interface CapturedTextNode {
+  kind: 'text';
+  id: string;
+  text: string;
+}
+
+export interface CapturedElementNode {
+  kind: 'element';
   id: string;
   tag: string;
-  text: string | null;
   attributes: Record<string, string>;
   rect: CapturedRect;
   styles: CapturedStyles;
   children: CapturedNode[];
 }
 
+export type CapturedNode = CapturedElementNode | CapturedTextNode;
+
 export interface CapturedPage {
   url: string;
   title: string;
   viewport: CaptureViewport;
-  root: CapturedNode | null;
+  root: CapturedElementNode | null;
   assets: CapturedAsset[];
   nodeCount: number;
 }

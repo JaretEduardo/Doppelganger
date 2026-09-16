@@ -1,4 +1,9 @@
-import type { CapturedAsset, CapturedNode, CapturedStyles } from './captured-page.interface.js';
+import type {
+  CapturedAsset,
+  CapturedElementNode,
+  CapturedNode,
+  CapturedStyles,
+} from './captured-page.interface.js';
 
 /**
  * Everything below runs inside the browser via `page.evaluate()`. It must be
@@ -9,7 +14,7 @@ import type { CapturedAsset, CapturedNode, CapturedStyles } from './captured-pag
  */
 
 export interface BrowserExtractionResult {
-  root: CapturedNode | null;
+  root: CapturedElementNode | null;
   assets: CapturedAsset[];
   nodeCount: number;
   totalElementCount: number;
@@ -79,17 +84,6 @@ export function extractCapturedPage(ignoredTags: readonly string[]): BrowserExtr
       styles[property] = (computed as unknown as Record<string, string>)[property];
     }
     return styles;
-  }
-
-  function getDirectText(element: Element): string | null {
-    let text = '';
-    for (const child of Array.from(element.childNodes)) {
-      if (child.nodeType === Node.TEXT_NODE) {
-        text += child.textContent ?? '';
-      }
-    }
-    const collapsed = text.replace(/\s+/g, ' ').trim();
-    return collapsed.length > 0 ? collapsed : null;
   }
 
   function getAttributes(element: Element): Record<string, string> {
@@ -174,25 +168,58 @@ export function extractCapturedPage(ignoredTags: readonly string[]): BrowserExtr
     }
   }
 
-  function buildNode(element: Element): CapturedNode {
+  /**
+   * Builds the ordered list of element/text children for `parent`, preserving
+   * exact DOM order (e.g. `Text("Hello ") Element(strong) Text(", hi.")`).
+   *
+   * Whitespace-only text nodes are collapsed to a single space and dropped
+   * only when they sit at the very start or end of `parent`'s child list
+   * (typically source-formatting indentation); elsewhere a lone space is kept
+   * since it can be the only thing separating two inline siblings.
+   */
+  function buildChildren(parent: Element): CapturedNode[] {
+    const rawChildNodes = Array.from(parent.childNodes);
+    const children: CapturedNode[] = [];
+
+    rawChildNodes.forEach((child, index) => {
+      if (child.nodeType === Node.TEXT_NODE) {
+        const collapsed = (child.textContent ?? '').replace(/\s+/g, ' ');
+        const isWhitespaceOnly = collapsed.trim().length === 0;
+
+        if (isWhitespaceOnly) {
+          const isAtEdge = index === 0 || index === rawChildNodes.length - 1;
+          if (isAtEdge || collapsed.length === 0) return;
+          children.push({ kind: 'text', id: createNodeId(), text: ' ' });
+          return;
+        }
+
+        children.push({ kind: 'text', id: createNodeId(), text: collapsed });
+        return;
+      }
+
+      if (child.nodeType === Node.ELEMENT_NODE) {
+        const element = child as Element;
+        if (isIgnored(element)) return;
+        children.push(buildElementNode(element));
+      }
+    });
+
+    return children;
+  }
+
+  function buildElementNode(element: Element): CapturedElementNode {
     const id = createNodeId();
     const computed = window.getComputedStyle(element);
 
     collectElementAssets(id, element);
     collectBackgroundImageAssets(id, computed);
 
-    const children: CapturedNode[] = [];
-    for (const child of Array.from(element.children)) {
-      if (isIgnored(child)) continue;
-      children.push(buildNode(child));
-    }
-
     const rect = element.getBoundingClientRect();
 
     return {
+      kind: 'element',
       id,
       tag: element.tagName.toLowerCase(),
-      text: getDirectText(element),
       attributes: getAttributes(element),
       rect: {
         x: rect.x,
@@ -205,12 +232,12 @@ export function extractCapturedPage(ignoredTags: readonly string[]): BrowserExtr
         bottom: rect.bottom,
       },
       styles: readStyles(computed),
-      children,
+      children: buildChildren(element),
     };
   }
 
   const bodyElement = document.body;
-  const root = bodyElement && !isIgnored(bodyElement) ? buildNode(bodyElement) : null;
+  const root = bodyElement && !isIgnored(bodyElement) ? buildElementNode(bodyElement) : null;
 
   return {
     root,
