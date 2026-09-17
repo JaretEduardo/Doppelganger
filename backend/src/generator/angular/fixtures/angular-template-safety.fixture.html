@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Angular Template Safety Fixture</title>
+  </head>
+  <body>
+    <p>{{CURRENTYEAR}}</p>
+    <p>{{Portada:Menú | Categoría:Actualidad}}</p>
+    <p>{{#time: j "de" F|-1 day}}</p>
+    <p>Literal {{ hello | pipe }} text</p>
+    <p>{{Efemérides|1 de enero}}</p>
+    <p>Contact us @if you have questions about @for loops.</p>
+    <p>@for (item of items) { do something }</p>
+    <p>The set {1, 2, 3} has three elements.</p>
+    <div data-mw='{"wt":"{{Portada:Botón | {{CURRENTYEAR}} }}"}'>MediaWiki button</div>
+    <p>Normal text with braces like {this} should render unchanged visually.</p>
+  </body>
+</html>

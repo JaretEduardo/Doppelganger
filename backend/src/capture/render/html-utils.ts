@@ -83,12 +83,30 @@ export function escapeAttributeValue(value: string): string {
   return escapeHtml(value).replace(/"/g, '&quot;');
 }
 
+/**
+ * `data-*` attributes known to carry large, purely non-visual metadata
+ * rather than anything a CSS selector or script would reasonably hook into.
+ * Denied explicitly, by name — NOT a blanket "drop all data-*", since many
+ * sites legitimately use data attributes for visual state or CSS hooks.
+ *
+ * - `data-mw`: MediaWiki/Parsoid — a JSON blob of the *original wikitext*
+ *   and template-expansion bookkeeping for the element (can be many KB per
+ *   element on a template-heavy page). Zero visual relevance, and its
+ *   contents are exactly the kind of `{{...}}`/`@`-shaped wikitext that
+ *   broke Angular compilation before this attribute was dropped.
+ * - `data-parsoid`: MediaWiki/Parsoid — DOM-diffing/serialization
+ *   bookkeeping (source offsets, whitespace trivia) for round-tripping back
+ *   to wikitext. Also zero visual relevance.
+ */
+const KNOWN_NON_VISUAL_DATA_ATTRIBUTES = new Set(['data-mw', 'data-parsoid']);
+
 export function isSafeAttribute(name: string): boolean {
   const lower = name.toLowerCase();
   // id/class/style are the renderer's own styling hooks; carrying over the
   // original ones would collide with dg-* selectors or fight CapturedStyles.
   if (lower === 'id' || lower === 'class' || lower === 'style') return false;
   if (lower.startsWith('on')) return false;
+  if (KNOWN_NON_VISUAL_DATA_ATTRIBUTES.has(lower)) return false;
   if (lower.startsWith('data-') || lower.startsWith('aria-')) return true;
   return SAFE_ATTRIBUTE_ALLOWLIST.has(lower);
 }

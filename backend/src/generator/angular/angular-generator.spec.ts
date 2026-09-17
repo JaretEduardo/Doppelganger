@@ -251,6 +251,119 @@ describe('generateAngularProject', () => {
     expect(appHtml).toContain('&#123;&#123; handlebars &#125;&#125;');
   });
 
+  it('wraps the rendered body in <ng-container ngNonBindable>', async () => {
+    const root = element('body', { children: [text('hello')] });
+    await generateAngularProject(page(root), outputDir);
+
+    const appHtml = await fs.readFile(path.join(outputDir, 'src/app/app.html'), 'utf-8');
+
+    expect(appHtml.trimStart()).toMatch(/^<ng-container ngNonBindable>/);
+    expect(appHtml.trimEnd()).toMatch(/<\/ng-container>$/);
+  });
+
+  it('neutralizes real MediaWiki template syntax found in a Wikipedia capture', async () => {
+    // Milestone 4.1 regression: entity-encoding {{/}} alone (Milestone 4)
+    // was not enough — Angular decodes entities before checking for
+    // interpolation, so &#123;&#123; still read back as real {{. Verified
+    // against the real compiler in
+    // angular-template-safety.angular-generator-spec.ts.
+    const root = element('body', {
+      children: [
+        element('p', { children: [text('{{CURRENTYEAR}}')] }),
+        element('p', { children: [text('{{Portada:Menú | Categoría:Actualidad}}')] }),
+        element('p', { children: [text('{{#time: j "de" F|-1 day}}')] }),
+        element('p', { children: [text('{{Efemérides|1 de enero}}')] }),
+      ],
+    });
+    await generateAngularProject(page(root), outputDir);
+
+    const appHtml = await fs.readFile(path.join(outputDir, 'src/app/app.html'), 'utf-8');
+
+    expect(appHtml).not.toContain('{{');
+    expect(appHtml).not.toContain('}}');
+    expect(appHtml).toContain('&#123;&#123;CURRENTYEAR&#125;&#125;');
+    expect(appHtml).toContain('&#123;&#123;Portada:Menú | Categoría:Actualidad&#125;&#125;');
+    expect(appHtml).toContain('&#123;&#123;#time: j "de" F|-1 day&#125;&#125;');
+    expect(appHtml).toContain('&#123;&#123;Efemérides|1 de enero&#125;&#125;');
+  });
+
+  it('neutralizes literal @if/@for-shaped text, which ngNonBindable alone does not stop', async () => {
+    // Milestone 4.1 regression: a literal "@if (x) { ... }" inside
+    // <ng-container ngNonBindable> still crashed the Angular compiler in
+    // testing (block-syntax detection runs on raw characters before
+    // ngNonBindable's scope applies). Escaping "@" is the actual fix.
+    const root = element('body', {
+      children: [
+        element('p', { children: [text('Contact us @if you have questions')] }),
+        element('p', { children: [text('@for (item of items) { show item }')] }),
+      ],
+    });
+    await generateAngularProject(page(root), outputDir);
+
+    const appHtml = await fs.readFile(path.join(outputDir, 'src/app/app.html'), 'utf-8');
+
+    expect(appHtml).not.toMatch(/[^&#0-9;]@/); // no raw "@" left outside of "&#64;"
+    expect(appHtml).toContain('&#64;if you have questions');
+    expect(appHtml).toContain('&#64;for (item of items)');
+  });
+
+  it('neutralizes a lone/unbalanced brace, which Angular\'s ICU parser otherwise misreads', async () => {
+    // Milestone 4.1 regression: a single unpaired "{" in plain text (no "@",
+    // no ngNonBindable needed to reproduce) crashed the compiler with
+    // "Invalid ICU message. Missing '}'" in testing.
+    const root = element('body', { children: [text('Some { text } here')] });
+    await generateAngularProject(page(root), outputDir);
+
+    const appHtml = await fs.readFile(path.join(outputDir, 'src/app/app.html'), 'utf-8');
+
+    expect(appHtml).toContain('Some &#123; text &#125; here');
+  });
+
+  it('neutralizes {{ }} embedded inside a preserved attribute value', async () => {
+    const root = element('body', {
+      children: [element('span', { attributes: { title: 'Uses {{CURRENTYEAR}} inside' } })],
+    });
+    await generateAngularProject(page(root), outputDir);
+
+    const appHtml = await fs.readFile(path.join(outputDir, 'src/app/app.html'), 'utf-8');
+
+    expect(appHtml).toContain('title="Uses &#123;&#123;CURRENTYEAR&#125;&#125; inside"');
+  });
+
+  it('drops data-mw and data-parsoid (MediaWiki non-visual metadata) but keeps other data-* attributes', async () => {
+    const root = element('body', {
+      children: [
+        element('div', {
+          attributes: {
+            'data-mw': '{"wt":"{{Portada:Botón | {{CURRENTYEAR}} }}"}',
+            'data-parsoid': '{"dsr":[0,10,0,0]}',
+            'data-visual-hook': 'keep-me',
+          },
+        }),
+      ],
+    });
+    await generateAngularProject(page(root), outputDir);
+
+    const appHtml = await fs.readFile(path.join(outputDir, 'src/app/app.html'), 'utf-8');
+
+    expect(appHtml).not.toContain('data-mw');
+    expect(appHtml).not.toContain('data-parsoid');
+    expect(appHtml).not.toContain('Botón');
+    expect(appHtml).toContain('data-visual-hook="keep-me"');
+  });
+
+  it('does not visually alter plain text that happens to contain a balanced brace pair', async () => {
+    // Sanity check: escaping is lossless — a normal sentence with an
+    // incidental brace still reads the same once the browser decodes the
+    // entities, it is just represented differently in the template source.
+    const root = element('body', { children: [text('The set {1, 2, 3} has three items.')] });
+    await generateAngularProject(page(root), outputDir);
+
+    const appHtml = await fs.readFile(path.join(outputDir, 'src/app/app.html'), 'utf-8');
+
+    expect(appHtml).toContain('The set &#123;1, 2, 3&#125; has three items.');
+  });
+
   it('preserves inline SVG geometry and presentation attributes', async () => {
     const circle = element('circle', {
       attributes: { cx: '10', cy: '10', r: '10', fill: 'rgb(34,197,94)' },
@@ -328,7 +441,7 @@ describe('generateAngularProject', () => {
 
     const appHtml = await fs.readFile(path.join(outputDir, 'src/app/app.html'), 'utf-8');
     const appTs = await fs.readFile(path.join(outputDir, 'src/app/app.ts'), 'utf-8');
-    expect(appHtml.trim()).toBe('');
+    expect(appHtml.trim()).toBe('<ng-container ngNonBindable></ng-container>');
     expect(appTs).not.toContain('host:');
   });
 });
