@@ -11,51 +11,16 @@ export interface CapturedRect {
   bottom: number;
 }
 
-export interface CapturedStyles {
-  display: string;
-  position: string;
-  boxSizing: string;
-  top: string;
-  right: string;
-  bottom: string;
-  left: string;
-  width: string;
-  height: string;
-  minWidth: string;
-  minHeight: string;
-  maxWidth: string;
-  maxHeight: string;
-  margin: string;
-  padding: string;
-  color: string;
-  background: string;
-  backgroundColor: string;
-  fontFamily: string;
-  fontSize: string;
-  fontWeight: string;
-  fontStyle: string;
-  lineHeight: string;
-  letterSpacing: string;
-  textAlign: string;
-  textDecoration: string;
-  borderTop: string;
-  borderRight: string;
-  borderBottom: string;
-  borderLeft: string;
-  borderRadius: string;
-  boxShadow: string;
-  opacity: string;
-  overflow: string;
-  listStyle: string;
-  flexDirection: string;
-  flexWrap: string;
-  alignItems: string;
-  justifyContent: string;
-  gap: string;
-  gridTemplateColumns: string;
-  gridTemplateRows: string;
-  transform: string;
-  zIndex: string;
+/**
+ * Every enumerable computed CSS property Chromium reported for an element,
+ * keyed by its real kebab-case CSS name (e.g. "background-color",
+ * "grid-column-start", "--brand-color") rather than a hand-picked allowlist.
+ */
+export type CapturedStyles = Record<string, string>;
+
+export interface CapturedPseudoElement {
+  kind: 'before' | 'after' | 'marker';
+  styles: CapturedStyles;
 }
 
 export type CapturedAssetKind = 'img' | 'source' | 'background-image' | 'svg';
@@ -80,6 +45,7 @@ export interface CapturedElementNode {
   attributes: Record<string, string>;
   rect: CapturedRect;
   styles: CapturedStyles;
+  pseudoElements?: CapturedPseudoElement[];
   children: CapturedNode[];
 }
 
