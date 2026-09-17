@@ -2,6 +2,7 @@ import type {
   CapturedAsset,
   CapturedElementNode,
   CapturedNode,
+  CapturedPseudoElement,
   CapturedStyles,
 } from './captured-page.interface.js';
 
@@ -23,53 +24,9 @@ export interface BrowserExtractionResult {
 export function extractCapturedPage(ignoredTags: readonly string[]): BrowserExtractionResult {
   // Declared inside the function on purpose: page.evaluate() only serializes
   // this function's own source text, so a module-level constant would be
-  // undefined once it runs in the browser.
-  const STYLE_PROPERTIES = [
-    'display',
-    'position',
-    'boxSizing',
-    'top',
-    'right',
-    'bottom',
-    'left',
-    'width',
-    'height',
-    'minWidth',
-    'minHeight',
-    'maxWidth',
-    'maxHeight',
-    'margin',
-    'padding',
-    'color',
-    'background',
-    'backgroundColor',
-    'fontFamily',
-    'fontSize',
-    'fontWeight',
-    'fontStyle',
-    'lineHeight',
-    'letterSpacing',
-    'textAlign',
-    'textDecoration',
-    'borderTop',
-    'borderRight',
-    'borderBottom',
-    'borderLeft',
-    'borderRadius',
-    'boxShadow',
-    'opacity',
-    'overflow',
-    'listStyle',
-    'flexDirection',
-    'flexWrap',
-    'alignItems',
-    'justifyContent',
-    'gap',
-    'gridTemplateColumns',
-    'gridTemplateRows',
-    'transform',
-    'zIndex',
-  ] as const satisfies readonly (keyof CapturedStyles)[];
+  // undefined once it runs in the browser (see STYLE_PROPERTIES's old
+  // comment in git history for the same lesson learned in Milestone 2).
+  const PSEUDO_SELECTORS = ['::before', '::after', '::marker'] as const;
 
   const ignoredTagNames = new Set(ignoredTags.map((tag) => tag.toUpperCase()));
   const assets: CapturedAsset[] = [];
@@ -85,14 +42,87 @@ export function extractCapturedPage(ignoredTags: readonly string[]): BrowserExtr
     return ignoredTagNames.has(element.tagName);
   }
 
+  function toAbsoluteUrl(rawUrl: string): string {
+    try {
+      return new URL(rawUrl, document.baseURI).href;
+    } catch {
+      return rawUrl;
+    }
+  }
+
+  /**
+   * Rewrites every `url(...)` reference in a computed style value to an
+   * absolute URL. In practice Chromium already resolves `<url>`-typed
+   * computed values (background-image, mask-image, list-style-image,
+   * content, cursor, border-image-source...) against the document's base
+   * URL on its own — verified empirically, not assumed — but this makes
+   * that guarantee explicit and independently testable rather than relying
+   * on it silently, and it's cheap: most values don't contain "url(" at all.
+   */
+  function normalizeCssUrls(value: string): string {
+    if (!value.includes('url(')) return value;
+    return value.replace(/url\((['"]?)(.*?)\1\)/g, (match, quote: string, rawUrl: string) => {
+      if (!rawUrl) return match;
+      return `url(${quote}${toAbsoluteUrl(rawUrl)}${quote})`;
+    });
+  }
+
+  /**
+   * Captures every enumerable computed CSS property for `computed`, keyed by
+   * its real (kebab-case) CSS name — including custom properties (`--foo`).
+   * No manual allowlist: `CSSStyleDeclaration`'s indexed enumeration already
+   * covers true longhands (including modern layout properties like
+   * grid-column-start, flex-grow, align-self, aspect-ratio, logical
+   * properties, and inherited custom properties) — shorthands like `margin`
+   * or `grid-column` aren't themselves enumerable, but every shorthand
+   * decomposes losslessly into the longhands backing it, so nothing is
+   * actually missing from the rendered result.
+   *
+   * No property-level denylist: unlike HTML attributes (raw source markup,
+   * where `isSafeAttribute`/`sanitizeAttributeValue` genuinely defend
+   * against on* handlers and javascript: URLs), computed style *values* are
+   * entirely browser-serialized — there is no equivalent injection surface
+   * to filter here, and modern browsers don't execute `url(javascript:...)`
+   * in CSS contexts. Reviewed for Milestone 5; no property was found to need
+   * excluding.
+   */
   function readStyles(computed: CSSStyleDeclaration): CapturedStyles {
-    const styles = {} as Record<(typeof STYLE_PROPERTIES)[number], string>;
-    for (const property of STYLE_PROPERTIES) {
-      // CSSStyleDeclaration's camelCase properties aren't index-signature typed,
-      // so read them through a loosely typed view instead of one branch per key.
-      styles[property] = (computed as unknown as Record<string, string>)[property];
+    const styles: Record<string, string> = {};
+    for (let i = 0; i < computed.length; i++) {
+      const property = computed.item(i);
+      const value = computed.getPropertyValue(property);
+      if (value) styles[property] = normalizeCssUrls(value);
     }
     return styles;
+  }
+
+  /**
+   * `content: normal` is the initial value for `::marker` (meaning "use the
+   * browser's default bullet/number", which the `list-style*` properties
+   * already reproduce) — not "no marker". For `::before`/`::after`,
+   * `content: none` is what "nothing generated" looks like; `content: ""`
+   * (empty string) is a real, common, meaningful value (icon-only pseudo
+   * elements styled purely via background/border) and must NOT be treated
+   * as absent.
+   */
+  function isMeaningfulPseudoContent(pseudo: (typeof PSEUDO_SELECTORS)[number], content: string): boolean {
+    return pseudo === '::marker' ? content !== 'normal' : content !== 'none';
+  }
+
+  function readPseudoElements(element: Element): CapturedPseudoElement[] | undefined {
+    const results: CapturedPseudoElement[] = [];
+
+    for (const pseudo of PSEUDO_SELECTORS) {
+      const computed = window.getComputedStyle(element, pseudo);
+      if (!isMeaningfulPseudoContent(pseudo, computed.content)) continue;
+
+      results.push({
+        kind: pseudo === '::before' ? 'before' : pseudo === '::after' ? 'after' : 'marker',
+        styles: readStyles(computed),
+      });
+    }
+
+    return results.length > 0 ? results : undefined;
   }
 
   function getAttributes(element: Element): Record<string, string> {
@@ -224,6 +254,7 @@ export function extractCapturedPage(ignoredTags: readonly string[]): BrowserExtr
     collectBackgroundImageAssets(id, computed);
 
     const rect = element.getBoundingClientRect();
+    const pseudoElements = readPseudoElements(element);
 
     return {
       kind: 'element',
@@ -241,6 +272,7 @@ export function extractCapturedPage(ignoredTags: readonly string[]): BrowserExtr
         bottom: rect.bottom,
       },
       styles: readStyles(computed),
+      ...(pseudoElements ? { pseudoElements } : {}),
       children: buildChildren(element),
     };
   }

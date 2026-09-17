@@ -11,57 +11,39 @@ export interface CapturedRect {
   bottom: number;
 }
 
-export interface CapturedStyles {
-  display: string;
-  position: string;
-  boxSizing: string;
-  top: string;
-  right: string;
-  bottom: string;
-  left: string;
-  width: string;
-  height: string;
-  minWidth: string;
-  minHeight: string;
-  maxWidth: string;
-  maxHeight: string;
-  margin: string;
-  padding: string;
-  color: string;
-  background: string;
-  backgroundColor: string;
-  fontFamily: string;
-  fontSize: string;
-  fontWeight: string;
-  fontStyle: string;
-  lineHeight: string;
-  letterSpacing: string;
-  textAlign: string;
-  textDecoration: string;
-  /**
-   * Per-side, not the `border` shorthand: the shorthand's resolved value is
-   * only defined when all four sides are identical (CSSOM), so it comes back
-   * as an empty string for the extremely common border-bottom-only pattern
-   * (table rows, dividers) — silently dropping the border on reconstruction.
-   */
-  borderTop: string;
-  borderRight: string;
-  borderBottom: string;
-  borderLeft: string;
-  borderRadius: string;
-  boxShadow: string;
-  opacity: string;
-  overflow: string;
-  listStyle: string;
-  flexDirection: string;
-  flexWrap: string;
-  alignItems: string;
-  justifyContent: string;
-  gap: string;
-  gridTemplateColumns: string;
-  gridTemplateRows: string;
-  transform: string;
-  zIndex: string;
+/**
+ * Every enumerable computed CSS property Chromium reports for an element
+ * (via `getComputedStyle(element).item(i)`/`getPropertyValue()`), keyed by
+ * its real kebab-case CSS name (`"background-color"`, `"grid-column-start"`,
+ * `"--brand-color"`...) — not a hand-picked allowlist. This includes CSS
+ * custom properties (`--foo`).
+ *
+ * Why not a curated list of ~40 properties (the pre-Milestone-5 design):
+ * real-world pages use hundreds of longhand properties for layout (grid
+ * placement, flex sizing, logical properties, etc.), and maintaining a
+ * manual list meant every missing property was a silent, hard-to-diagnose
+ * visual bug (see the Milestone 2.5/4 write-ups — box-sizing, per-side
+ * border, position offsets and list-style were each found this way, one at
+ * a time). Capturing everything the browser already computed removes that
+ * entire failure mode. Shorthands (e.g. `margin`, `border`, `grid-column`)
+ * are intentionally NOT captured as such: Chromium's indexed enumeration
+ * only exposes true longhands, but every shorthand decomposes losslessly
+ * into the longhands that back it, so nothing is lost — a renderer emitting
+ * `margin-top`/`margin-right`/`margin-bottom`/`margin-left` individually
+ * produces an identical box to one shorthand `margin` declaration.
+ */
+export type CapturedStyles = Record<string, string>;
+
+/**
+ * `::before`/`::after`/`::marker` captured only when they render something
+ * (see dom-extractor.browser.ts for the exact "is this meaningful" check).
+ * `styles` already contains the pseudo-element's `content` value alongside
+ * everything else — there's no separate `content` field, since it's just
+ * one more entry in the same computed-style record used for real elements.
+ */
+export interface CapturedPseudoElement {
+  kind: 'before' | 'after' | 'marker';
+  styles: CapturedStyles;
 }
 
 export type CapturedAssetKind = 'img' | 'source' | 'background-image' | 'svg';
@@ -95,6 +77,8 @@ export interface CapturedElementNode {
   attributes: Record<string, string>;
   rect: CapturedRect;
   styles: CapturedStyles;
+  /** ::before/::after/::marker, only present when at least one renders something. */
+  pseudoElements?: CapturedPseudoElement[];
   /** Element and text children, in exact DOM order. */
   children: CapturedNode[];
 }

@@ -15,52 +15,59 @@ function nextId(): string {
   return id;
 }
 
-function styles(overrides: Partial<CapturedStyles> = {}): CapturedStyles {
+/**
+ * A small, representative base of *real* (kebab-case) CSS property names —
+ * not an exhaustive replica of everything the real extractor now captures
+ * (Milestone 5 removed the manual allowlist entirely; see
+ * captured-page.interface.ts). Tests override just the properties they care
+ * about via `styleOverrides`.
+ */
+function styles(overrides: CapturedStyles = {}): CapturedStyles {
   const base: CapturedStyles = {
     display: 'block',
     position: 'static',
-    boxSizing: 'content-box',
+    'box-sizing': 'content-box',
     top: 'auto',
     right: 'auto',
     bottom: 'auto',
     left: 'auto',
     width: 'auto',
     height: 'auto',
-    minWidth: 'auto',
-    minHeight: 'auto',
-    maxWidth: 'none',
-    maxHeight: 'none',
+    'min-width': 'auto',
+    'min-height': 'auto',
+    'max-width': 'none',
+    'max-height': 'none',
     margin: '0px',
     padding: '0px',
     color: 'rgb(0, 0, 0)',
     background: 'rgba(0, 0, 0, 0)',
-    backgroundColor: 'rgba(0, 0, 0, 0)',
-    fontFamily: 'Arial',
-    fontSize: '16px',
-    fontWeight: '400',
-    fontStyle: 'normal',
-    lineHeight: 'normal',
-    letterSpacing: 'normal',
-    textAlign: 'start',
-    textDecoration: 'none solid rgb(0, 0, 0)',
-    borderTop: '0px none rgb(0, 0, 0)',
-    borderRight: '0px none rgb(0, 0, 0)',
-    borderBottom: '0px none rgb(0, 0, 0)',
-    borderLeft: '0px none rgb(0, 0, 0)',
-    borderRadius: '0px',
-    boxShadow: 'none',
+    'background-color': 'rgba(0, 0, 0, 0)',
+    'font-family': 'Arial',
+    'font-size': '16px',
+    'font-weight': '400',
+    'font-style': 'normal',
+    'line-height': 'normal',
+    'letter-spacing': 'normal',
+    'text-align': 'start',
+    'text-decoration': 'none solid rgb(0, 0, 0)',
+    'border-top': '0px none rgb(0, 0, 0)',
+    'border-right': '0px none rgb(0, 0, 0)',
+    'border-bottom': '0px none rgb(0, 0, 0)',
+    'border-left': '0px none rgb(0, 0, 0)',
+    'border-radius': '0px',
+    'box-shadow': 'none',
     opacity: '1',
     overflow: 'visible',
-    listStyle: 'disc outside none',
-    flexDirection: 'row',
-    flexWrap: 'nowrap',
-    alignItems: 'normal',
-    justifyContent: 'normal',
+    'list-style': 'disc outside none',
+    'flex-direction': 'row',
+    'flex-wrap': 'nowrap',
+    'align-items': 'normal',
+    'justify-content': 'normal',
     gap: 'normal',
-    gridTemplateColumns: 'none',
-    gridTemplateRows: 'none',
+    'grid-template-columns': 'none',
+    'grid-template-rows': 'none',
     transform: 'none',
-    zIndex: 'auto',
+    'z-index': 'auto',
   };
   return { ...base, ...overrides };
 }
@@ -70,7 +77,7 @@ function element(
   options: {
     attributes?: Record<string, string>;
     children?: CapturedNode[];
-    styleOverrides?: Partial<CapturedStyles>;
+    styleOverrides?: CapturedStyles;
   } = {},
 ): CapturedElementNode {
   return {
@@ -214,7 +221,7 @@ describe('renderCapturedPage', () => {
   });
 
   it('emits one CSS rule per element with every captured style as kebab-case', () => {
-    const root = element('body', { styleOverrides: { backgroundColor: 'rgb(255, 0, 0)' } });
+    const root = element('body', { styleOverrides: { 'background-color': 'rgb(255, 0, 0)' } });
     const rendered = renderCapturedPage(page(root));
 
     expect(rendered.css).toContain(`#dg-${root.id} {`);
@@ -232,6 +239,42 @@ describe('renderCapturedPage', () => {
     const childRuleIndex = rendered.css.indexOf(`#dg-${child.id} {`);
     expect(rootRuleIndex).toBeGreaterThanOrEqual(0);
     expect(childRuleIndex).toBeGreaterThan(rootRuleIndex);
+  });
+
+  it('renders ::before/::after/::marker as real CSS pseudo-element rules', () => {
+    const withPseudos = element('p');
+    withPseudos.pseudoElements = [
+      { kind: 'before', styles: styles({ content: '"→ "', color: 'rgb(200, 0, 0)' }) },
+      { kind: 'after', styles: styles({ content: '" ←"', color: 'rgb(0, 0, 200)' }) },
+    ];
+    const rendered = renderCapturedPage(page(element('body', { children: [withPseudos] })));
+
+    expect(rendered.css).toContain(`#dg-${withPseudos.id}::before {`);
+    expect(rendered.css).toContain('content: "→ ";');
+    expect(rendered.css).toContain('color: rgb(200, 0, 0);');
+    expect(rendered.css).toContain(`#dg-${withPseudos.id}::after {`);
+    expect(rendered.css).toContain('content: " ←";');
+  });
+
+  it('renders ::marker with its own content and styles', () => {
+    const li = element('li');
+    li.pseudoElements = [
+      { kind: 'marker', styles: styles({ content: '"* "', color: 'rgb(0, 128, 0)' }) },
+    ];
+    const rendered = renderCapturedPage(page(element('body', { children: [li] })));
+
+    expect(rendered.css).toContain(`#dg-${li.id}::marker {`);
+    expect(rendered.css).toContain('content: "* ";');
+    expect(rendered.css).toContain('color: rgb(0, 128, 0);');
+  });
+
+  it('does not render pseudo-element rules for a node with none', () => {
+    const plain = element('p');
+    const rendered = renderCapturedPage(page(element('body', { children: [plain] })));
+
+    expect(rendered.css).not.toContain('::before');
+    expect(rendered.css).not.toContain('::after');
+    expect(rendered.css).not.toContain('::marker');
   });
 
   it('preserves SVG geometry and presentation attributes (fill, viewBox, d, cx, cy, r...)', () => {
@@ -269,7 +312,7 @@ describe('renderCapturedPage', () => {
     // wider than the original (the renderer's elements default to
     // content-box). Found via the Milestone 2.5 complex fixture diff.
     const root = element('body', {
-      styleOverrides: { boxSizing: 'border-box', width: '100px', padding: '10px' },
+      styleOverrides: { 'box-sizing': 'border-box', width: '100px', padding: '10px' },
     });
     const rendered = renderCapturedPage(page(root));
 
@@ -281,7 +324,7 @@ describe('renderCapturedPage', () => {
     // all four sides match, which previously meant "border: ;" (invalid,
     // ignored) for the very common border-bottom-only pattern. Found via the
     // Milestone 2.5 complex fixture's table row dividers disappearing.
-    const row = element('td', { styleOverrides: { borderBottom: '1px solid rgb(226, 232, 240)' } });
+    const row = element('td', { styleOverrides: { 'border-bottom': '1px solid rgb(226, 232, 240)' } });
     const rendered = renderCapturedPage(page(element('body', { children: [row] })));
 
     expect(rendered.css).toContain('border-bottom: 1px solid rgb(226, 232, 240);');
@@ -293,7 +336,7 @@ describe('renderCapturedPage', () => {
     // lists) wasn't reproduced, so reconstructed <li>s fell back to the
     // browser's default disc bullets. Found via the Milestone 2.5 complex
     // fixture's sidebar nav and card feature lists.
-    const list = element('ul', { styleOverrides: { listStyle: 'none' } });
+    const list = element('ul', { styleOverrides: { 'list-style': 'none' } });
     const rendered = renderCapturedPage(page(element('body', { children: [list] })));
 
     expect(rendered.css).toContain('list-style: none;');

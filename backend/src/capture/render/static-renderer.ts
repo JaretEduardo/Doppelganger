@@ -91,6 +91,15 @@ function renderElement(node: CapturedElementNode, cssRules: string[]): string {
   const domId = toDomId(node.id);
   cssRules.push(`#${domId} {\n${renderDeclarationBlock(node.styles)}\n}`);
 
+  // Real ::before/::after/::marker rules, not synthetic elements — this
+  // reuses the browser's own pseudo-element rendering (font metrics, inline
+  // flow, positioning) instead of trying to reimplement it. `pseudo.styles`
+  // already includes `content` alongside everything else, from the same
+  // generic computed-style capture used for real elements.
+  for (const pseudo of node.pseudoElements ?? []) {
+    cssRules.push(`#${domId}::${pseudo.kind} {\n${renderDeclarationBlock(pseudo.styles)}\n}`);
+  }
+
   const attributes = renderAttributes(node, domId);
 
   if (VOID_ELEMENT_TAGS.has(node.tag)) {

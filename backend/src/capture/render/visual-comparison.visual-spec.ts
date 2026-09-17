@@ -26,15 +26,20 @@ const OUTPUT_DIR = path.resolve(HERE, '../../../output/visual');
 
 /**
  * Maximum allowed share of mismatched pixels between the original fixture
- * render and the Doppelganger reconstruction. Kept above 0 deliberately: a
- * couple of CSS properties still outside the captured set (e.g.
- * vertical-align, which affects the inline "verified" checkmark icon) and
- * ordinary font anti-aliasing jitter produce a small, real, non-zero diff.
- * Measured baseline on this fixture, after fixing the box-sizing,
- * SVG-attribute, position-offset, per-side-border and list-style gaps this
- * fixture uncovered (see the Milestone 2.5 write-up), is ~0.01%
- * (~140 / 1.5M pixels). 0.5% leaves a comfortable margin above that for
- * minor cross-run rendering jitter without hiding a real regression.
+ * render and the Doppelganger reconstruction. Kept above 0 deliberately:
+ * ordinary font anti-aliasing jitter produces a small, real, non-zero diff
+ * even with a pixel-perfect style capture.
+ *
+ * Milestone 5 replaced the ~40-property manual allowlist with a full dump of
+ * every enumerable computed CSS property (see captured-page.interface.ts),
+ * so gaps like the old "vertical-align isn't captured" are gone by
+ * construction rather than fixed one property at a time. The fixture also
+ * grew a dedicated grid/flex/logical-properties section (Milestone 5).
+ * Measured baseline after both changes is ~0.034% (~620 / 1.8M pixels) —
+ * comparable to the pre-Milestone-5 ~0.01% given the fixture is now larger
+ * and exercises more layout modes. 0.5% leaves a comfortable margin above
+ * that for minor cross-run rendering jitter without hiding a real
+ * regression.
  */
 const MAX_DIFF_RATIO = 0.005; // 0.5%
 

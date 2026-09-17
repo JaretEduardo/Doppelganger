@@ -44,11 +44,12 @@ const PROJECT_DIR = path.join(OUTPUT_DIR, PROJECT_NAME);
 const FRONTEND_NODE_MODULES = path.resolve(HERE, '../../../../frontend/node_modules');
 
 /**
- * Measured baseline for this fixture is ~0.0094% (141 / 1,503,360 px) — the
- * same handful of anti-aliasing/vertical-align pixels StaticRenderer's own
- * visual test leaves unresolved (Milestone 2.5), since app.html/app.scss are
- * generated from the exact same renderDocumentBody/renderStyles output. 0.5%
- * leaves headroom for minor cross-run rendering jitter without hiding a real
+ * Measured baseline for this fixture is ~0.034% (617 / 1,818,720 px) —
+ * matching StaticRenderer's own visual test almost exactly, since
+ * app.html/app.scss are generated from the exact same
+ * renderDocumentBody/renderStyles output (now backed by Milestone 5's full
+ * computed-style capture rather than a manual allowlist). 0.5% leaves
+ * headroom for minor cross-run rendering jitter without hiding a real
  * regression introduced by the Angular wrapping itself.
  */
 const MAX_DIFF_RATIO = 0.005; // 0.5%

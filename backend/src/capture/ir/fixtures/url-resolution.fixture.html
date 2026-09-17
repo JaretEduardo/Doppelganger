@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>URL Resolution Fixture</title>
+    <style>
+      .bg-document-relative {
+        background-image: url('relative-image.png');
+      }
+      .bg-root-relative {
+        background-image: url('/root-relative-image.png');
+      }
+      .li-image {
+        list-style-image: url('bullet.png');
+      }
+      .bg-data-uri {
+        background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg"></svg>');
+      }
+    </style>
+  </head>
+  <body>
+    <div class="bg-document-relative" id="bg-document-relative">x</div>
+    <div class="bg-root-relative" id="bg-root-relative">x</div>
+    <ul>
+      <li class="li-image" id="li-image">item</li>
+    </ul>
+    <div class="bg-data-uri" id="bg-data-uri">x</div>
+  </body>
+</html>
